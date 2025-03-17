@@ -1,18 +1,10 @@
 <template>
   <div class="templates">
     <div class="header">
-      <Tabs 
-        :tabs="tabs" 
-        v-model:value="activeTab"
-        card 
-      />
+      <Tabs :tabs="tabs" v-model:value="activeTab" card />
     </div>
     <div class="list">
-      <div 
-        class="slide-item"
-        v-for="slide in slides" 
-        :key="slide.id"
-      >
+      <div class="slide-item" v-for="slide in slides" :key="slide.id">
         <ThumbnailSlide class="thumbnail" :slide="slide" :size="180" />
 
         <div class="btns">
@@ -24,51 +16,51 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted, computed, watch } from 'vue'
-import { storeToRefs } from 'pinia'
-import { useSlidesStore } from '@/store'
-import type { Slide } from '@/types/slides'
-import api from '@/services'
+import { ref, onMounted, computed, watch } from 'vue';
+import { storeToRefs } from 'pinia';
+import { useSlidesStore } from '@/store';
+import type { Slide } from '@/types/slides';
+import api from '@/services';
 
-import ThumbnailSlide from '@/views/components/ThumbnailSlide/index.vue'
-import Button from '@/components/Button.vue'
-import Tabs from '@/components/Tabs.vue'
+import ThumbnailSlide from '@/views/components/ThumbnailSlide/index.vue';
+import Button from '@/components/Button.vue';
+import Tabs from '@/components/Tabs.vue';
 
 interface TabItem {
-  key: string
-  label: string
+  key: string;
+  label: string;
 }
 
 const emit = defineEmits<{
-  (event: 'select', payload: Slide): void
-}>()
+  (event: 'select', payload: Slide): void;
+}>();
 
-const slidesStore = useSlidesStore()
-const { templates } = storeToRefs(slidesStore)
-const slides = ref<Slide[]>([])
+const slidesStore = useSlidesStore();
+const { templates } = storeToRefs(slidesStore);
+const slides = ref<Slide[]>([]);
 
 const tabs = computed<TabItem[]>(() => {
   return templates.value.map(item => ({
     label: item.name,
-    key: item.id,
-  }))
-})
-const activeTab = ref('')
+    key: item.id
+  }));
+});
+const activeTab = ref('');
 
 const insertTemplate = (slide: Slide) => {
-  emit('select', slide)
-}
+  emit('select', slide);
+};
 
 watch(activeTab, () => {
-  if (!activeTab.value) return
+  if (!activeTab.value) return;
   api.getFileData(activeTab.value).then(ret => {
-    slides.value = ret.slides
-  })
-})
+    slides.value = ret.slides;
+  });
+});
 
 onMounted(() => {
-  activeTab.value = templates.value[0].id
-})
+  activeTab.value = templates.value[0].id;
+});
 </script>
 
 <style lang="scss" scoped>
@@ -106,7 +98,7 @@ onMounted(() => {
     justify-content: center;
     align-items: center;
     display: flex;
-    background-color: rgba($color: #000, $alpha: .25);
+    background-color: rgba($color: #000, $alpha: 0.25);
     opacity: 0;
     transition: opacity $transitionDelay;
   }

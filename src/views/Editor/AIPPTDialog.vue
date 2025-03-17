@@ -205,7 +205,6 @@ const parsePPTObject = (templateSlides: Slide[]) => {
 
 const createPPT = async () => {
   loading.value = true;
-
   const templateSlides: Slide[] = await api.getFileData(selectedTemplate.value).then(ret => ret.slides);
   const stream = await api.AIPPT(outline.value, language.value, 'doubao-1.5-pro-32k');
   if (!stream.ok) {
@@ -223,7 +222,7 @@ const createPPT = async () => {
     const { done, value } = await reader.read();
     if (done) {
       loading.value = false;
-      // mainStore.setAIPPTDialogState(false);
+      mainStore.setAIPPTDialogState(false);
       break;
     }
 

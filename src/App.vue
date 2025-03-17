@@ -47,8 +47,7 @@ onMounted(async () => {
       slidesStore.setSlides(slides);
     });
   } else {
-    // api.getFileData('slides').then((slides: Slide[]) => {
-    api.getMockData('slides').then((slides: Slide[]) => {
+    api.getFileData('slides').then((slides: Slide[]) => {
       slidesStore.setSlides(slides);
       nextTick(() => {
         mainStore.setAIPPTDialogState(true);
