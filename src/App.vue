@@ -47,7 +47,6 @@ onMounted(async () => {
       slidesStore.setSlides(slides);
     });
   } else {
-    // console.log('AI_ACCESS_TOKEN:' + import.meta.env.VITE_AI_ACCESS_TOKEN);
     // api.getFileData('slides').then((slides: Slide[]) => {
     api.getMockData('slides').then((slides: Slide[]) => {
       slidesStore.setSlides(slides);

@@ -2,9 +2,9 @@
   <div class="aippt-dialog">
     <div class="header">
       <span class="title">AIPPT</span>
-      <span class="subtite" v-if="step === 'template'">从下方挑选合适的模板，开始生成PPT</span>
-      <span class="subtite" v-else-if="step === 'outline'">确认下方内容大纲（点击编辑内容，右键添加/删除大纲项），开始选择模板</span>
-      <span class="subtite" v-else>在下方输入您的PPT主题，并适当补充信息，如行业、岗位、学科、用途等</span>
+      <span class="subtitle" v-if="step === 'template'">从下方挑选合适的模板，开始生成PPT</span>
+      <span class="subtitle" v-else-if="step === 'outline'">确认下方内容大纲（点击编辑内容，右键添加/删除大纲项），开始选择模板</span>
+      <span class="subtitle" v-else>在下方输入您的PPT主题，并适当补充信息，如行业、岗位、学科、用途等</span>
     </div>
 
     <template v-if="step === 'setup'">
@@ -20,18 +20,6 @@
       <div class="recommends">
         <div class="recommend" v-for="(item, index) in recommends" :key="index" @click="setKeyword(item)">{{ item }}</div>
       </div>
-      <!-- <div class="model-selector">
-        <div class="label">选择AI模型：</div>
-        <Select
-          style="width: 160px;"
-          v-model:value="model"
-          :options="[
-            { label: 'Doubao-1.5-Pro', value: 'doubao-1.5-pro-32k' },
-            { label: 'DeepSeek-v3', value: 'ark-deepseek-v3' },
-            { label: 'GLM-4-Flash', value: 'GLM-4-flash' },
-          ]"
-        />
-      </div>-->
     </template>
     <div class="preview" v-if="step === 'outline'">
       <pre ref="outlineRef" v-if="outlineCreating">{{ outline }}</pre>
@@ -66,7 +54,7 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
 import api from '@/services';
 import useAIPPT from '@/hooks/useAIPPT';
@@ -94,7 +82,8 @@ const outlineRef = ref<HTMLElement>();
 const inputRef = ref<InstanceType<typeof Input>>();
 const step = ref<'setup' | 'outline' | 'template'>('setup');
 const model = ref('ark-deepseek-v3');
-
+const currentContentPosition = ref(0);
+const content = ref('');
 const recommends = ref([
   '大模型的最新发展与应用',
   '中学生睡眠调查与研究',
@@ -122,6 +111,10 @@ const createOutline = async () => {
   outlineCreating.value = true;
 
   const stream = await api.AIPPT_Outline(keyword.value, language.value, model.value);
+  if (!stream.ok) {
+    loading.value = false;
+    throw new Error('访问远程服务器出错');
+  }
 
   loading.value = false;
   step.value = 'outline';
@@ -129,63 +122,136 @@ const createOutline = async () => {
   const reader: ReadableStreamDefaultReader = stream.body.getReader();
   const decoder = new TextDecoder('utf-8');
 
-  const readStream = () => {
-    reader.read().then(({ done, value }) => {
-      if (done) {
-        outlineCreating.value = false;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      outlineCreating.value = false;
+      break;
+    }
+    let parseMessage: any;
+    let chunk: any;
+    chunk += decoder.decode(value, { stream: true });
+    const lines = chunk.split('\n');
+    lines.forEach((line: string) => {
+      if (!line || !line.startsWith('data:')) {
         return;
       }
-
-      const chunk = decoder.decode(value, { stream: true });
-      outline.value += chunk;
-
-      if (outlineRef.value) {
-        outlineRef.value.scrollTop = outlineRef.value.scrollHeight + 20;
+      try {
+        parseMessage = JSON.parse(line.substring(6));
+      } catch (error) {
+        return;
       }
-
-      readStream();
+      if (parseMessage.event === 'message') {
+        outline.value += parseMessage.answer;
+      }
+      nextTick(() => {
+        if (outlineRef.value) {
+          outlineRef.value.scrollTop = outlineRef.value.scrollHeight + 20;
+        }
+      });
     });
-  };
-  readStream();
+  }
+};
+
+const parsePPTObject = (templateSlides: Slide[]) => {
+  let i = 0;
+  let objectDepth = 0;
+  let currentObjectStart = 0;
+  let tempContent = '';
+  if (currentContentPosition.value > 0) {
+    let tempChar = content.value.substring(currentContentPosition.value, currentContentPosition.value + 1);
+    if (tempChar === '}') {
+      currentContentPosition.value++;
+      tempChar = content.value.substring(currentContentPosition.value, currentContentPosition.value + 1);
+    }
+    if (tempChar === ',') {
+      currentContentPosition.value++;
+    }
+    tempContent = content.value.substring(currentContentPosition.value);
+  } else {
+    tempContent = content.value;
+  }
+
+  while (i < tempContent.length) {
+    const char = tempContent[i];
+    // 处理非字符串内容
+    if (char === '{') {
+      if (objectDepth === 0) {
+        currentObjectStart = i;
+      }
+      objectDepth++;
+    } else if (char === '}') {
+      objectDepth--;
+      // 当一个完整的JSON对象解析完成
+      if (objectDepth === 0) {
+        const jsonStr = tempContent.substring(currentObjectStart, i + 1);
+        try {
+          const jsonObj = JSON.parse(jsonStr);
+          // 只处理包含type属性的对象
+          if (jsonObj.hasOwnProperty('type')) {
+            currentContentPosition.value = currentContentPosition.value + i;
+            AIPPT(templateSlides, [jsonObj]);
+          }
+        } catch (e) {
+          // 解析错误，可能是不完整的JSON
+          console.error('JSON解析错误:', e);
+          i++;
+        }
+      }
+    }
+    i++;
+  }
 };
 
 const createPPT = async () => {
   loading.value = true;
 
-  const stream = await api.AIPPT(outline.value, language.value, 'doubao-1.5-pro-32k');
   const templateSlides: Slide[] = await api.getFileData(selectedTemplate.value).then(ret => ret.slides);
+  const stream = await api.AIPPT(outline.value, language.value, 'doubao-1.5-pro-32k');
+  if (!stream.ok) {
+    loading.value = false;
+    throw new Error('访问远程服务器出错');
+  }
 
   const reader: ReadableStreamDefaultReader = stream.body.getReader();
   const decoder = new TextDecoder('utf-8');
+  let parseMessage: any;
+  let unprocessedBuffer: any;
+  content.value = '';
 
-  const readStream = () => {
-    reader.read().then(({ done, value }) => {
-      if (done) {
-        loading.value = false;
-        mainStore.setAIPPTDialogState(false);
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      loading.value = false;
+      // mainStore.setAIPPTDialogState(false);
+      break;
+    }
+
+    unprocessedBuffer += decoder.decode(value, { stream: true });
+    const lines = unprocessedBuffer.split('\n');
+    lines.forEach((line: string) => {
+      if (!line || !line.startsWith('data:')) {
         return;
       }
-
-      const chunk = decoder.decode(value, { stream: true });
       try {
-        const slide: AIPPTSlide = JSON.parse(chunk);
-        AIPPT(templateSlides, [slide]);
-      } catch (err) {
-        // eslint-disable-next-line
-        console.error(err);
+        parseMessage = JSON.parse(line.substring(6));
+      } catch (error) {
+        return;
       }
-
-      readStream();
+      if (parseMessage.event === 'message') {
+        content.value += parseMessage.answer;
+        parsePPTObject(templateSlides);
+      }
     });
-  };
-  readStream();
+    unprocessedBuffer = lines[lines.length - 1];
+  }
 };
 </script>
 
 <style lang="scss" scoped>
 .aippt-dialog {
   margin: -20px;
-  padding: 30px 30px;
+  padding: 30px;
 }
 .header {
   margin-bottom: 12px;
@@ -194,14 +260,13 @@ const createPPT = async () => {
     font-weight: 700;
     font-size: 20px;
     margin-right: 8px;
-    // background: linear-gradient(270deg, #d897fd, #33bcfc);
     background: #53a8ff;
     background-clip: text;
     color: transparent;
     vertical-align: text-bottom;
     line-height: 1.1;
   }
-  .subtite {
+  .subtitle {
     color: #888;
     font-size: 12px;
   }
