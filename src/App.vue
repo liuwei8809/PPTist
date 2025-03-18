@@ -46,6 +46,10 @@ onMounted(async () => {
     api.getMockData('slides').then((slides: Slide[]) => {
       slidesStore.setSlides(slides);
     });
+  } else if (location.hostname === '127.0.0.1') {
+    api.getMockData('slides').then((slides: Slide[]) => {
+      slidesStore.setSlides(slides);
+    });
   } else {
     api.getFileData('slides').then((slides: Slide[]) => {
       slidesStore.setSlides(slides);
